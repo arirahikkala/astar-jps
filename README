@@ -1,5 +1,7 @@
 A simple C library for A* pathfinding over uniform-cost 2-dimensional grids. Meant to be embedded and modified as needed. See AStar.h for pertinent documentation, and TestAStar.c for a simple usage example.
 
+Based on the well-known A* and binary heap algorithms, with jump point search from D. Harabor and A. Grastien. Online Graph Pruning for Pathfinding on Grid Maps. In National Conference on Artificial Intelligence (AAAI), 2011. Or, for those who of us who prefer clicking on links to tracking down academical references: http://grastien.net/ban/articles/hg-aaai11.pdf
+
 Copyright 2011 Ari Rahikkala. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are
