@@ -2,7 +2,7 @@
 #define PRIORITYQUEUE_H_
 
 typedef struct item {
-	int priority;
+	double priority;
 	int value;
 } item;
 

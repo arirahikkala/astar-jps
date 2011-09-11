@@ -5,14 +5,14 @@
 #include <math.h>
 
 // A few forward declarations for functions needed for the distance metrics
-static int max (int, int);
-static int chebyshevDistance (struct coord, struct coord);
+static double max (double, double);
+static double chebyshevDistance (struct coord, struct coord);
 
 // Distance metrics for distance estimation and precise computation. You might
 // want to change these to match your game mechanics.
 
 // Chebyshev distance metric for distance estimation by default
-static int estimateDistance (struct coord start, struct coord end)
+static double estimateDistance (struct coord start, struct coord end)
 {
 	return chebyshevDistance (start, end);
 }
@@ -23,7 +23,7 @@ static int estimateDistance (struct coord start, struct coord end)
 // Note that since we jump over points, we actually have to compute 
 // the entire distance - despite the uniform cost we can't just collapse
 // all costs to 1
-static int preciseDistance (struct coord start, struct coord end)
+static double preciseDistance (struct coord start, struct coord end)
 {
 	if (start.x - end.x != 0 && start.y - end.y != 0)
 		return sqrt (pow (start.x - end.x, 2) + 
@@ -34,7 +34,7 @@ static int preciseDistance (struct coord start, struct coord end)
 
 // Below this point, not a lot that there should be much need to change!
 
-static int max (int a, int b)
+static double max (double a, double b)
 {
 	if (a > b)
 		return a;
@@ -42,9 +42,9 @@ static int max (int a, int b)
 		return b;
 }
 
-static int chebyshevDistance (struct coord start, struct coord end)
+static double chebyshevDistance (struct coord start, struct coord end)
 {
-	return max (abs (start.x - end.x), abs (start.y - end.y));
+	return fmax (abs (start.x - end.x), abs (start.y - end.y));
 }
 
 // The order of directions is: 
@@ -266,7 +266,150 @@ static int *recordSolution (struct coord bounds,
 }
 
 
+static direction directionOfMove (struct coord from, struct coord to)
+{
+	if (from.x == to.x) {
+		if (from.y == to.y)
+			return -1;
+		else if (from.y < to.y)
+			return 4;
+		else // from.y > to.y
+			return 0;
+	}
+	else if (from.x < to.x) {
+		if (from.y == to.y)
+			return 2;
+		else if (from.y < to.y)
+			return 3;
+		else // from.y > to.y
+			return 1;
+	}
+	else { // from.x > to.x
+		if (from.y == to.y)
+			return 6;
+		else if (from.y < to.y)
+			return 5;
+		else // from.y > to.y
+			return 7;
+	}
+
+}
+
+static direction directionWeCameFrom (struct coord bounds, int node, int nodeFrom)
+{
+	if (nodeFrom == -1)
+		return -1;
+
+	return directionOfMove (getCoord (bounds, node), getCoord (bounds, nodeFrom));
+}
+
+static int isOptimalTurn (int dir, int dirFrom)
+{
+	if (dirFrom == -1) // allow going in any direction from the start
+		return 1;
+
+	// slightly wonky-looking math because C's % has the wrong
+	// behaviour with negative numerators for our purposes
+	if (directionIsDiagonal (dir)) {
+		if (dirFrom + 7 % 8 == dir ||
+		    dirFrom + 6 % 8 == dir ||
+		    dirFrom + 1 % 8 == dir ||
+		    dirFrom + 2 % 8 == dir)
+			return 1;
+	}
+	else
+		if (dirFrom + 7 % 8 == dir ||
+		    dirFrom + 1 % 8 == dir)
+			return 1;
+
+	return 0;
+}
+
 int *astar_compute (const short *grid, 
+		    int *solLength, 
+		    int boundX, 
+		    int boundY, 
+		    int start, 
+		    int end)
+{
+	struct coord bounds = {boundX, boundY};
+	int size = bounds.x * bounds.y;
+
+	*solLength = -1;
+
+	if (start >= size || start < 0 || end >= size || end < 0)
+		return NULL;
+
+	struct coord startCoord = getCoord (bounds, start);
+	struct coord endCoord = getCoord (bounds, end);
+
+	queue *open = createQueue();
+	char closed [size];
+	double gScores [size];
+	int cameFrom [size];
+
+	memset (closed, 0, sizeof(closed));
+
+
+	gScores[start] = 0;
+	cameFrom[start] = -1;
+	if (contained (bounds, startCoord))
+		insert (open, start, estimateDistance (startCoord, endCoord));
+	
+	while (open->size) {
+		int node = findMin (open)->value; 
+		struct coord nodeCoord = getCoord (bounds, node);
+		if (nodeCoord.x == endCoord.x && nodeCoord.y == endCoord.y) {
+			freeQueue (open);
+			return recordSolution (bounds, cameFrom, solLength, start, node);
+		}
+
+		deleteMin (open);
+		closed[node] = 1;
+
+		for (int i = 0; i < 8; i++)
+		{
+			// only jump in optimal directions
+			direction from = directionWeCameFrom (bounds, node, cameFrom[node]);
+			if (!isOptimalTurn (i, from))
+				continue;
+
+			int newNode = jump (grid, bounds, end, i, node);
+			struct coord newCoord = getCoord (bounds, newNode);
+
+			// this'll also bail out if jump() returned -1
+			if (!contained (bounds, newCoord))
+				continue;
+
+			if (closed[newNode])
+				continue;
+			
+			if (!exists (open, newNode)) {
+				cameFrom[newNode] = node;
+				gScores[newNode] = gScores[node] + 
+					preciseDistance (nodeCoord, newCoord);
+				insert (open, newNode, gScores[newNode] + 
+					estimateDistance (newCoord, endCoord));
+			}
+			else if (gScores[newNode] > 
+				 gScores[node] + 
+				 preciseDistance (nodeCoord, newCoord)) {
+				cameFrom[newNode] = node;
+				int oldGScore = gScores[newNode];
+				gScores[newNode] = gScores[node] + 
+					preciseDistance (nodeCoord, newCoord);
+				changePriority (open, 
+						newNode, 
+						priorityOf (open, newNode) - oldGScore + gScores[newNode]);
+			}
+		}
+	}
+	freeQueue (open);
+	return NULL;
+}
+
+// for testing vs. the optimised case
+int *astar_unopt_compute (const short *grid, 
 		    int *solLength, 
 		    int boundX, 
 		    int boundY, 
@@ -310,11 +453,11 @@ int *astar_compute (const short *grid,
 
 		for (int i = 0; i < 8; i++)
 		{
-			int newNode = jump (grid, bounds, end, i, node);
-			struct coord newCoord = getCoord (bounds, newNode);
+			struct coord newCoord = adjustInDirection (nodeCoord, i);
+			int newNode = getIndex (bounds, newCoord);
 
 			// this'll also bail out if jump() returned -1
-			if (!contained (bounds, newCoord))
+			if (!contained (bounds, newCoord) || !grid[newNode])
 				continue;
 
 			if (closed[newNode])
