@@ -57,7 +57,7 @@ void siftUp (queue *q, int i)
 	return siftUp (q, p);
 }
 
-void insert (queue *q, int value, int pri)
+void insert (queue *q, int value, double pri)
 {
 	item i;
 	i.value = value;
@@ -125,7 +125,7 @@ item *findMin (const queue *q)
 	return q->root;
 }
 
-void changePriority (queue *q, int ind, int newPriority)
+void changePriority (queue *q, int ind, double newPriority)
 {
 	int oldPriority = q->root[q->index[ind]].priority;
 	q->root[q->index[ind]].priority = newPriority;

@@ -34,14 +34,6 @@ static double preciseDistance (struct coord start, struct coord end)
 
 // Below this point, not a lot that there should be much need to change!
 
-static double max (double a, double b)
-{
-	if (a > b)
-		return a;
-	else
-		return b;
-}
-
 static double chebyshevDistance (struct coord start, struct coord end)
 {
 	return fmax (abs (start.x - end.x), abs (start.y - end.y));
@@ -107,9 +99,9 @@ static struct coord adjustInDirection (struct coord c, int dir)
 	case 2: return (struct coord) {c.x + 1, c.y };
 	case 3: return (struct coord) {c.x + 1, c.y + 1};
 	case 4: return (struct coord) {c.x, c.y + 1};
-	case 5: return (struct coord) {c.x - 1, c.y - 1};
+	case 5: return (struct coord) {c.x - 1, c.y + 1};
 	case 6: return (struct coord) {c.x - 1, c.y};
-	case 7: return (struct coord) {c.x - 1, c.y + 1};
+	case 7: return (struct coord) {c.x - 1, c.y - 1};
 	}
 }
 
@@ -192,10 +184,6 @@ static int jump (const short *grid, struct coord bounds, int goal, int dir, int 
 	if (hasForcedNeighbours (grid, bounds, coord, dir))
 		return node;
 
-	struct coord next = adjustInDirection (coord, dir);
-	if (!isEnterable (grid, bounds, next))
-		return node;
-
 	if (directionIsDiagonal (dir)) {
 		int next = jump (grid, bounds, goal, dir - 1, node);
 		if (next >= 0)
@@ -266,7 +254,7 @@ static int *recordSolution (struct coord bounds,
 }
 
 
-static direction directionOfMove (struct coord from, struct coord to)
+static direction directionOfMove (struct coord to, struct coord from)
 {
 	if (from.x == to.x) {
 		if (from.y == to.y)
@@ -308,18 +296,21 @@ static int isOptimalTurn (int dir, int dirFrom)
 	if (dirFrom == -1) // allow going in any direction from the start
 		return 1;
 
+	if (dirFrom == dir) // allow continuing without turning
+		return 1;
+
 	// slightly wonky-looking math because C's % has the wrong
 	// behaviour with negative numerators for our purposes
-	if (directionIsDiagonal (dir)) {
-		if (dirFrom + 7 % 8 == dir ||
-		    dirFrom + 6 % 8 == dir ||
-		    dirFrom + 1 % 8 == dir ||
-		    dirFrom + 2 % 8 == dir)
+	if (directionIsDiagonal (dirFrom)) {
+		if ((dirFrom + 7) % 8 == dir ||
+		    (dirFrom + 6) % 8 == dir ||
+		    (dirFrom + 1) % 8 == dir ||
+		    (dirFrom + 2) % 8 == dir)
 			return 1;
 	}
 	else
-		if (dirFrom + 7 % 8 == dir ||
-		    dirFrom + 1 % 8 == dir)
+		if ((dirFrom + 7) % 8 == dir ||
+		    (dirFrom + 1) % 8 == dir)
 			return 1;
 
 	return 0;
@@ -343,6 +334,9 @@ int *astar_compute (const short *grid,
 	struct coord startCoord = getCoord (bounds, start);
 	struct coord endCoord = getCoord (bounds, end);
 
+	if (!contained (bounds, startCoord) || !contained (bounds, endCoord))
+		return NULL;
+
 	queue *open = createQueue();
 	char closed [size];
 	double gScores [size];
@@ -353,9 +347,9 @@ int *astar_compute (const short *grid,
 
 	gScores[start] = 0;
 	cameFrom[start] = -1;
-	if (contained (bounds, startCoord))
-		insert (open, start, estimateDistance (startCoord, endCoord));
-	
+
+	insert (open, start, estimateDistance (startCoord, endCoord));
+
 	while (open->size) {
 		int node = findMin (open)->value; 
 		struct coord nodeCoord = getCoord (bounds, node);
@@ -367,10 +361,11 @@ int *astar_compute (const short *grid,
 		deleteMin (open);
 		closed[node] = 1;
 
+		direction from = directionWeCameFrom (bounds, node, cameFrom[node]);
+
 		for (int i = 0; i < 8; i++)
 		{
 			// only jump in optimal directions
-			direction from = directionWeCameFrom (bounds, node, cameFrom[node]);
 			if (!isOptimalTurn (i, from))
 				continue;
 
@@ -408,7 +403,7 @@ int *astar_compute (const short *grid,
 	return NULL;
 }
 
-// for testing vs. the optimised case
+// for testing vs. the optimised case; this function won't stick around for too long
 int *astar_unopt_compute (const short *grid, 
 		    int *solLength, 
 		    int boundX, 
@@ -427,9 +422,12 @@ int *astar_unopt_compute (const short *grid,
 	struct coord startCoord = getCoord (bounds, start);
 	struct coord endCoord = getCoord (bounds, end);
 
+	if (!contained (bounds, startCoord) || !contained (bounds, endCoord))
+		return NULL;
+
 	queue *open = createQueue();
 	char closed [size];
-	int gScores [size];
+	double gScores [size];
 	int cameFrom [size];
 
 	memset (closed, 0, sizeof(closed));

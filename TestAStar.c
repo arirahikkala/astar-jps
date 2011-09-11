@@ -1,20 +1,47 @@
 #include "AStar.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-int main ()
+int main (int argc, char **argv)
 {
-	int width = 5;
-	int height = 5;
-	short grid[] = {1, 1, 1, 1, 1,
-		        0, 0, 0, 0, 1,
-		        1, 1, 1, 1, 1,
-		        1, 0, 0, 0, 0,
-		        1, 1, 1, 1, 1};
-	
+	if (argc != 6) {
+		fprintf (stderr, "testAStar <mapfile> <startX> <startY> <goalX> <goalY>\n");
+		fprintf (stderr, "(where <mapfile> is of the format used in http://www.aiide.org/benchmarks/)\n");
+		exit (1);
+	}
+	int width;
+	int height;
+
+	FILE *mapFile = fopen (argv[1], "r");
+
+	fscanf (mapFile, "type octile\nheight %i\nwidth %i\nmap\n", &height, &width);
+
+	printf ("%i %i\n", width, height);
+	short grid[width*height];
+	memset (grid, 0, sizeof (short) * width * height);
+
+	for (int i = 0; i < height - 1; i++) {
+		char buf[width + 1]; // space for a newline
+		int read = fread (buf, 1, width + 1, mapFile);
+		for (int j = 0; j < width - 1; j++) {
+			if (buf[j] == '.' || buf[j] == 'G')
+				grid[width*i+j] = 1;
+			else
+				grid[width*i+j] = 0;
+		}
+	}
+
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			printf (grid[x + width * y] ? "." : "#");
+		}
+		puts ("");
+	}
+
 	int solLength = 0;
-	int begin = astar_getIndexByWidth (width, 0, 0);
-	int end = astar_getIndexByWidth (width, 4, 4);
+	int begin = astar_getIndexByWidth (width, atoi(argv[2]), atoi(argv[3]));
+	int end = astar_getIndexByWidth (width, atoi(argv[4]), atoi(argv[5]));
 
 	int* solution = astar_compute (grid, &solLength, width, height, begin, end);
 

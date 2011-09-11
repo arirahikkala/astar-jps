@@ -14,10 +14,10 @@ typedef struct queue {
 	unsigned int indexAllocated;
 } queue;
 
-void insert (queue *q, int value, int priority);
+void insert (queue *q, int value, double priority);
 void deleteMin (queue *q);
 item *findMin (const queue *q);
-void changePriority (queue *q, int ind, int newPriority);
+void changePriority (queue *q, int ind, double newPriority);
 void delete (queue *q, int ind);
 int priorityOf (const queue *q, int ind);
 int exists (const queue *q, int ind);
