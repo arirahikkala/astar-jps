@@ -469,7 +469,7 @@ int *astar_unopt_compute (const char *grid,
 	astar.start = start;
 	astar.goal = end;
 	astar.grid = grid;
-	astar.open = createQueue();
+	astar.open = open;
 	astar.closed = closed;
 	astar.gScores = gScores;
 	astar.cameFrom = cameFrom;
