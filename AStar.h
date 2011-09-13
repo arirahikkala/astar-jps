@@ -1,10 +1,10 @@
 #ifndef ASTAR_H_
 #define ASTAR_H_
 
-struct coord {
+typedef struct coord {
 	int x;
 	int y;
-};
+} coord_t;
 
 /* Run A* pathfinding over uniform-cost 2d grids using jump point search.
 
@@ -18,12 +18,20 @@ struct coord {
    return value: Array of node indexes making up the solution, of length solLength, in reverse order
  */
 
-int *astar_compute (const short *grid, 
+int *astar_compute (const char *grid, 
 		    int *solLength, 
 		    int boundX, 
 		    int boundY, 
 		    int start, 
 		    int end);
+
+int *astar_unopt_compute (const char *grid, 
+		    int *solLength, 
+		    int boundX, 
+		    int boundY, 
+		    int start, 
+		    int end);
+
 
 /* Compute cell indexes from cell coordinates and the grid width */
 int astar_getIndexByWidth (int width, int x, int y);
