@@ -283,10 +283,10 @@ static int jump (astar_t *astar, direction dir, int start)
 	}
 
 	if (directionIsDiagonal (dir)) {
-		int next = jump (astar, dir - 1, node);
+		int next = jump (astar, (dir + 7) % 8, node);
 		if (next >= 0)
 			return node;
-		next = jump (astar, dir + 1, node);
+		next = jump (astar, (dir + 1) % 8, node);
 		if (next >= 0)
 			return node;
 	}
