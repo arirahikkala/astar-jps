@@ -81,9 +81,11 @@ static int contained (coord_t bounds, coord_t c)
 }
 
 // is this coordinate within the map bounds, and also walkable?
-static int isEnterable (const char *grid, coord_t bounds, coord_t coord)
+static int isEnterable (astar_t *astar, coord_t coord)
 {
-	return contained (bounds, coord) && grid[getIndex (bounds, coord)];
+	node node = getIndex (astar->bounds, coord);
+	return contained (astar->bounds, coord) && 
+		astar->grid[node];
 }
 
 static int directionIsDiagonal (direction dir)
@@ -163,10 +165,9 @@ static int implies (int a, int b)
    Similar reasoning applies for the diagonal case, except with bigger angles.
    
  */
-static int hasForcedNeighbours (astar_t astar, coord_t coord, int dir)
+static int hasForcedNeighbours (astar_t *astar, coord_t coord, int dir)
 {
-#define ENTERABLE(n) isEnterable (astar.grid,\
-	                          astar.bounds,\
+#define ENTERABLE(n) isEnterable (astar, \
 	                          adjustInDirection (coord, dir + (n)))
 	if (directionIsDiagonal (dir))
 		return !implies (ENTERABLE (-2), ENTERABLE (-3)) ||
@@ -177,45 +178,45 @@ static int hasForcedNeighbours (astar_t astar, coord_t coord, int dir)
 #undef ENTERABLE
 }
 
-static void addToOpenSet (astar_t astar,
+static void addToOpenSet (astar_t *astar,
 			  int node, 
 			  int nodeFrom)
 {
-	coord_t nodeCoord = getCoord (astar.bounds, node);
-	coord_t nodeFromCoord = getCoord (astar.bounds, nodeFrom);
+	coord_t nodeCoord = getCoord (astar->bounds, node);
+	coord_t nodeFromCoord = getCoord (astar->bounds, nodeFrom);
 
-	if (!exists (astar.open, node)) {
-		astar.cameFrom[node] = nodeFrom;
-		astar.gScores[node] = astar.gScores[nodeFrom] + 
+	if (!exists (astar->open, node)) {
+		astar->cameFrom[node] = nodeFrom;
+		astar->gScores[node] = astar->gScores[nodeFrom] + 
 			preciseDistance (nodeFromCoord, nodeCoord);
-		insert (astar.open, node, astar.gScores[node] + 
+		insert (astar->open, node, astar->gScores[node] + 
 			estimateDistance (nodeCoord, 
-					  getCoord (astar.bounds, astar.goal)));
+					  getCoord (astar->bounds, astar->goal)));
 	}
-	else if (astar.gScores[node] > 
-		 astar.gScores[nodeFrom] + 
+	else if (astar->gScores[node] > 
+		 astar->gScores[nodeFrom] + 
 		 preciseDistance (nodeFromCoord, nodeCoord)) {
-		astar.cameFrom[node] = nodeFrom;
-		int oldGScore = astar.gScores[node];
-		astar.gScores[node] = astar.gScores[nodeFrom] + 
+		astar->cameFrom[node] = nodeFrom;
+		int oldGScore = astar->gScores[node];
+		astar->gScores[node] = astar->gScores[nodeFrom] + 
 			preciseDistance (nodeFromCoord, nodeCoord);
-		double newPri = priorityOf (astar.open, node)
+		double newPri = priorityOf (astar->open, node)
 			- oldGScore
-			+ astar.gScores[node];
-		changePriority (astar.open, node, newPri);
+			+ astar->gScores[node];
+		changePriority (astar->open, node, newPri);
 	}	
 }
 
 
 // directly translated from "algorithm 2" in the paper
-static int jump (astar_t astar, direction dir, int start)
+static int jump (astar_t *astar, direction dir, int start)
 {
-	coord_t coord = adjustInDirection (getCoord (astar.bounds, start), dir);
-	int node = getIndex (astar.bounds, coord);
-	if (!isEnterable (astar.grid, astar.bounds, coord))
+	coord_t coord = adjustInDirection (getCoord (astar->bounds, start), dir);
+	int node = getIndex (astar->bounds, coord);
+	if (!isEnterable (astar, coord))
 		return -1;
 
-	if (node == astar.goal || 
+	if (node == astar->goal || 
 	    hasForcedNeighbours (astar, coord, dir)) {
 		return node;
 	}
@@ -232,12 +233,12 @@ static int jump (astar_t astar, direction dir, int start)
 }
 
 // path interpolation between jump points in here
-static int nextNodeInSolution (astar_t astar,
+static int nextNodeInSolution (astar_t *astar,
 			       int *target,
 			       int node)
 {
-	coord_t c = getCoord (astar.bounds, node);
-	coord_t cTarget = getCoord (astar.bounds, *target);
+	coord_t c = getCoord (astar->bounds, node);
+	coord_t cTarget = getCoord (astar->bounds, *target);
 
 	if (c.x < cTarget.x) 
 		c.x++;
@@ -249,39 +250,39 @@ static int nextNodeInSolution (astar_t astar,
 	else if (c.y > cTarget.y)
 		c.y--;
 
-	node = getIndex (astar.bounds, c);
+	node = getIndex (astar->bounds, c);
 
 	if (node == *target)
-		*target = astar.cameFrom[*target];
+		*target = astar->cameFrom[*target];
 
 	return node;
 }
 
 // a bit more complex than the usual A* solution-recording method,
 // due to the need to interpolate path chunks
-static int *recordSolution (astar_t astar)
+static int *recordSolution (astar_t *astar)
 {
 	int rvLen = 1;
-	*astar.solutionLength = 0;
-	int target = astar.goal;
+	*astar->solutionLength = 0;
+	int target = astar->goal;
 	int *rv = malloc (rvLen * sizeof (int));
-	int i = astar.goal;
+	int i = astar->goal;
 
 	for (;;) {
 		i = nextNodeInSolution (astar, &target, i);
-		rv[*astar.solutionLength] = i;
-		(*astar.solutionLength)++;
-		if (*astar.solutionLength >= rvLen) {
+		rv[*astar->solutionLength] = i;
+		(*astar->solutionLength)++;
+		if (*astar->solutionLength >= rvLen) {
 			rvLen *= 2;
 			rv = realloc (rv, rvLen * sizeof (int));
 			if (!rv)
 				return NULL;
 		}
-		if (i == astar.start)
+		if (i == astar->start)
 			break;
 	}
 
-	(*astar.solutionLength)--; // don't include the starting tile
+	(*astar->solutionLength)--; // don't include the starting tile
 	return rv;
 }
 
@@ -315,13 +316,13 @@ static direction directionOfMove (coord_t to, coord_t from)
 
 }
 
-static direction directionWeCameFrom (astar_t astar, int node, int nodeFrom)
+static direction directionWeCameFrom (astar_t *astar, int node, int nodeFrom)
 {
 	if (nodeFrom == -1)
 		return -1;
 
-	return directionOfMove (getCoord (astar.bounds, node), 
-				getCoord (astar.bounds, nodeFrom));
+	return directionOfMove (getCoord (astar->bounds, node), 
+				getCoord (astar->bounds, nodeFrom));
 }
 
 static int isOptimalTurn (int dir, int dirFrom)
@@ -394,19 +395,18 @@ int *astar_compute (const char *grid,
 	cameFrom[start] = -1;
 
 	insert (open, start, estimateDistance (startCoord, endCoord));
-
 	while (open->size) {
 		int node = findMin (open)->value; 
 		coord_t nodeCoord = getCoord (bounds, node);
 		if (nodeCoord.x == endCoord.x && nodeCoord.y == endCoord.y) {
 			freeQueue (open);
-			return recordSolution (astar);
+			return recordSolution (&astar);
 		}
 
 		deleteMin (open);
 		closed[node] = 1;
 
-		direction from = directionWeCameFrom (astar, 
+		direction from = directionWeCameFrom (&astar, 
 						      node,
 						      cameFrom[node]);
 
@@ -416,7 +416,7 @@ int *astar_compute (const char *grid,
 			if (!isOptimalTurn (dir, from))
 				continue;
 
-			int newNode = jump (astar, dir, node);
+			int newNode = jump (&astar, dir, node);
 			coord_t newCoord = getCoord (bounds, newNode);
 
 			// this'll also bail out if jump() returned -1
@@ -426,7 +426,7 @@ int *astar_compute (const char *grid,
 			if (closed[newNode])
 				continue;
 			
-			addToOpenSet (astar, newNode, node);
+			addToOpenSet (&astar, newNode, node);
 
 		}
 	}
@@ -486,7 +486,7 @@ int *astar_unopt_compute (const char *grid,
 		coord_t nodeCoord = getCoord (bounds, node);
 		if (nodeCoord.x == endCoord.x && nodeCoord.y == endCoord.y) {
 			freeQueue (open);
-			return recordSolution (astar);
+			return recordSolution (&astar);
 		}
 
 		deleteMin (open);
@@ -503,7 +503,7 @@ int *astar_unopt_compute (const char *grid,
 			if (closed[newNode])
 				continue;
 			
-			addToOpenSet (astar, newNode, node);
+			addToOpenSet (&astar, newNode, node);
 
 		}
 	}
