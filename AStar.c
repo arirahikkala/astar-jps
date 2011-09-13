@@ -45,8 +45,28 @@ typedef struct astar {
 
 // The order of directions is: 
 // N, NE, E, SE, S, SW, W, NW 
-typedef char direction;
+typedef unsigned char direction;
+#define NO_DIRECTION 8
+typedef unsigned char directionset;
 
+// return and remove a direction from the set
+// returns 0 if the set was empty
+static direction nextDirectionInSet (directionset *dirs)
+{
+	for (int i = 0; i < 8; i++) {
+		char bit = 1 << i;
+		if (*dirs & bit) {
+			*dirs ^= bit;
+			return i;
+		}
+	}
+	return NO_DIRECTION;
+}
+
+static directionset addDirectionToSet (directionset dirs, direction dir)
+{
+	return dirs | 1 << dir;
+}
 
 /* Coordinates are represented either as pairs of an x-coordinate and
    y-coordinate, or map indexes, as appropriate. getIndex and getCoord
@@ -165,6 +185,7 @@ static int implies (int a, int b)
    Similar reasoning applies for the diagonal case, except with bigger angles.
    
  */
+/*
 static int hasForcedNeighbours (astar_t *astar, coord_t coord, int dir)
 {
 #define ENTERABLE(n) isEnterable (astar, \
@@ -176,6 +197,46 @@ static int hasForcedNeighbours (astar_t *astar, coord_t coord, int dir)
 		return !implies (ENTERABLE (-1), ENTERABLE (-2)) ||
 		       !implies (ENTERABLE (1), ENTERABLE (2));
 #undef ENTERABLE
+}
+*/
+static directionset forcedNeighbours (astar_t *astar, 
+				      coord_t coord, 
+				      direction dir)
+{
+	if (dir == NO_DIRECTION)
+		return 0;
+
+	directionset dirs = 0;
+#define ENTERABLE(n) isEnterable (astar, \
+				  adjustInDirection (coord, (dir + (n)) % 8))
+	if (directionIsDiagonal (dir)) {
+		if (!implies (ENTERABLE (6), ENTERABLE (5)))
+			dirs = addDirectionToSet (dirs, (dir + 6) % 8);
+		if (!implies (ENTERABLE (2), ENTERABLE (3)))
+			dirs = addDirectionToSet (dirs, (dir + 2) % 8);
+	}
+	else {
+		if (!implies (ENTERABLE (7), ENTERABLE (6)))
+			dirs = addDirectionToSet (dirs, (dir + 7) % 8);
+		if (!implies (ENTERABLE (1), ENTERABLE (2)))
+			dirs = addDirectionToSet (dirs, (dir + 1) % 8);
+	}	
+#undef ENTERABLE	
+	return dirs;
+}
+
+static directionset naturalNeighbours (direction dir)
+{
+	if (dir == NO_DIRECTION)
+		return 255;
+
+	directionset dirs = 0;
+	dirs = addDirectionToSet (dirs, dir);
+	if (directionIsDiagonal (dir)) {
+		dirs = addDirectionToSet (dirs, (dir + 1) % 8);
+		dirs = addDirectionToSet (dirs, (dir + 7) % 8);
+	}
+	return dirs;
 }
 
 static void addToOpenSet (astar_t *astar,
@@ -217,7 +278,7 @@ static int jump (astar_t *astar, direction dir, int start)
 		return -1;
 
 	if (node == astar->goal || 
-	    hasForcedNeighbours (astar, coord, dir)) {
+	    forcedNeighbours (astar, coord, dir)) {
 		return node;
 	}
 
@@ -319,37 +380,11 @@ static direction directionOfMove (coord_t to, coord_t from)
 static direction directionWeCameFrom (astar_t *astar, int node, int nodeFrom)
 {
 	if (nodeFrom == -1)
-		return -1;
+		return NO_DIRECTION;
 
 	return directionOfMove (getCoord (astar->bounds, node), 
 				getCoord (astar->bounds, nodeFrom));
 }
-
-static int isOptimalTurn (int dir, int dirFrom)
-{
-	if (dirFrom == -1) // allow going in any direction from the start
-		return 1;
-
-	if (dirFrom == dir) // allow continuing without turning
-		return 1;
-
-	// slightly wonky-looking math because C's % has the wrong
-	// behaviour with negative numerators for our purposes
-	if (directionIsDiagonal (dirFrom)) {
-		if ((dirFrom + 7) % 8 == dir ||
-		    (dirFrom + 6) % 8 == dir ||
-		    (dirFrom + 1) % 8 == dir ||
-		    (dirFrom + 2) % 8 == dir)
-			return 1;
-	}
-	else
-		if ((dirFrom + 7) % 8 == dir ||
-		    (dirFrom + 1) % 8 == dir)
-			return 1;
-
-	return 0;
-}
-
 
 int *astar_compute (const char *grid, 
 		    int *solLength, 
@@ -410,12 +445,12 @@ int *astar_compute (const char *grid,
 						      node,
 						      cameFrom[node]);
 
-		for (int dir = 0; dir < 8; dir++)
-		{
-			// only jump in optimal directions
-			if (!isOptimalTurn (dir, from))
-				continue;
+		directionset dirs = 
+			forcedNeighbours (&astar, nodeCoord, from) 
+		      | naturalNeighbours (from);
 
+		for (int dir = nextDirectionInSet (&dirs); dir != NO_DIRECTION; dir = nextDirectionInSet (&dirs))
+		{
 			int newNode = jump (&astar, dir, node);
 			coord_t newCoord = getCoord (bounds, newNode);
 
