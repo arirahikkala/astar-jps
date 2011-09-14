@@ -50,7 +50,7 @@ typedef unsigned char direction;
 typedef unsigned char directionset;
 
 // return and remove a direction from the set
-// returns 0 if the set was empty
+// returns NO_DIRECTION if the set was empty
 static direction nextDirectionInSet (directionset *dirs)
 {
 	for (int i = 0; i < 8; i++) {
