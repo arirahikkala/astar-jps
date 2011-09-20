@@ -393,6 +393,7 @@ int *astar_compute (const char *grid,
 		    int start, 
 		    int end)
 {
+	*solLength = -1;
 	astar_t astar;
 	coord_t bounds = {boundX, boundY};
 
@@ -414,7 +415,6 @@ int *astar_compute (const char *grid,
 	int cameFrom [size];
 
 	astar.solutionLength = solLength;
-	*astar.solutionLength = -1;
 	astar.bounds = bounds;
 	astar.start = start;
 	astar.goal = end;

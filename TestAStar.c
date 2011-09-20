@@ -2,75 +2,66 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 int main (int argc, char **argv)
 {
-	if (argc != 6) {
-		fprintf (stderr, "testAStar <mapfile> <startX> <startY> <goalX> <goalY>\n");
-		fprintf (stderr, "(where <mapfile> is of the format used in http://www.aiide.org/benchmarks/)\n");
+	if (argc != 2) {
+		fprintf (stderr, "testAStar <scenfile>\n");
+		fprintf (stderr, "(where <scenfile> is of the format used in http://www.aiide.org/benchmarks/)\n");
 		exit (1);
 	}
-	int width;
-	int height;
 
-	FILE *mapFile = fopen (argv[1], "r");
+	FILE *scenFile = fopen (argv[1], "r");
+	if (!scenFile) {
+		perror ("couldn't open given scenario file: ");
+		exit (1);
+	}
+
+	fscanf (scenFile, "version 1.0\n");
+	char mapFileBuf[255];
+	int bucket, height, width, startX, startY, goalX, goalY, optimal;
+	double something;
+	fscanf (scenFile, "%i %s %i %i %i %i %i %i %i %lf\n", 
+		&bucket, mapFileBuf, &width, &height, &startX, &startY,
+		&goalX, &goalY, &optimal, &something);
+
+	FILE *mapFile = fopen (mapFileBuf, "r");
+	if (!mapFile) {
+		fprintf (stderr, "couldn't open map file %s: %s\n", 
+			 mapFileBuf, strerror(errno));
+		exit (1);
+	}
 
 	fscanf (mapFile, "type octile\nheight %i\nwidth %i\nmap\n", &height, &width);
 
-	printf ("%i %i\n", width, height);
 	char grid[width*height];
 	memset (grid, 0, sizeof (char) * width * height);
 
-	for (int i = 0; i < height - 1; i++) {
+	for (int i = 0; i < height; i++) {
 		char buf[width + 1]; // space for a newline
 		fread (buf, 1, width + 1, mapFile);
-		for (int j = 0; j < width - 1; j++) {
+		for (int j = 0; j < width; j++) {
 			if (buf[j] == '.' || buf[j] == 'G')
 				grid[width*i+j] = 1;
 			else
 				grid[width*i+j] = 0;
 		}
 	}
-/*
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			printf (grid[x + width * y] ? "." : "#");
+	int doContinue = 1;
+	do {
+		int solLen = 0;
+		int begin = astar_getIndexByWidth (width, startX, startY);
+		int end = astar_getIndexByWidth (width, goalX, goalY);
+		free (astar_compute (grid, &solLen, width, height, begin, end));
+		if (solLen > optimal) {
+			fprintf (stderr, "validity error! In map %s, from (%i,%i) to (%i, %i), expected length %i, was length %i\n", mapFileBuf, startX, startY, goalX, goalY, optimal, solLen);
+			exit (1);
 		}
-		puts ("");
-	}
-*/
-	int solLength = 0;
-	int begin = astar_getIndexByWidth (width, atoi(argv[2]), atoi(argv[3]));
-	int end = astar_getIndexByWidth (width, atoi(argv[4]), atoi(argv[5]));
-
-	int* solution = astar_compute (grid, &solLength, width, height, begin, end);
-/*
-	// print the coordinates of the solution
-	// (remember: They're in reverse order in the array, and as usual
-	// the starting point is not included in the solution but the ending
-	// point is)
-	printf ("solLength: %i\n", solLength);
-	for (int i = solLength - 1; i >= 0; i--) {
-		int x, y;
-		astar_getCoordByWidth (width, solution[i], &x, &y);
-		printf ("(%i,%i)\n", x, y);
-	}
-	printf ("\n---\n\n");
-	// print the grid along with the solution path
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			int wasInSolution = 0;
-			for (int i = 0; i < solLength; i++) {
-				if ((x + width * y) == solution[i]) {
-					printf ("%i", i % 10);
-					wasInSolution = 1;
-				}					
-			}
-			if (!wasInSolution)
-				printf (grid[x + width*y] ? "." : "#");
-		}
-		printf ("\n");
-	}
-*/
-	free (solution);
+		doContinue = fscanf(scenFile,"%i %s %i %i %i %i %i %i %i %lf\n",
+				     &bucket, mapFileBuf, &width, &height, 
+				     &startX, &startY, &goalX,
+				     &goalY, &optimal, &something);
+	} while (doContinue > 0);
 }
+
