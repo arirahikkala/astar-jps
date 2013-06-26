@@ -386,6 +386,64 @@ static direction directionWeCameFrom (astar_t *astar, int node, int nodeFrom)
 				getCoord (astar->bounds, nodeFrom));
 }
 
+static int init_astar_object (astar_t* astar, const char *grid, int *solLength, int boundX, int boundY, int start, int end)
+{
+	*solLength = -1;
+	coord_t bounds = {boundX, boundY};
+
+	int size = bounds.x * bounds.y;
+
+	if (start >= size || start < 0 || end >= size || end < 0)
+		return 0;
+
+	coord_t startCoord = getCoord (bounds, start);
+	coord_t endCoord = getCoord (bounds, end);
+
+	if (!contained (bounds, startCoord) || !contained (bounds, endCoord))
+		return 0;
+
+	astar->solutionLength = solLength;
+	astar->bounds = bounds;
+	astar->start = start;
+	astar->goal = end;
+	astar->grid = grid;
+
+	astar->open = createQueue();
+	if (!astar->open)
+		return 0;
+
+	astar->closed = malloc (size);
+	if (!astar->closed) {
+		freeQueue (astar->open);
+		return 0;
+	}
+
+	astar->gScores = malloc (size * sizeof (double));
+	if (!astar->gScores) {
+		freeQueue (astar->open);
+		free (astar->closed);
+		return 0;
+	}
+
+	astar->cameFrom = malloc (size * sizeof (int));
+	if (!astar->cameFrom) {
+		freeQueue (astar->open);
+		free (astar->closed);
+		free (astar->gScores);
+		return 0;
+	}
+
+	memset (astar->closed, 0, size);
+
+	astar->gScores[start] = 0;
+	astar->cameFrom[start] = -1;
+
+	insert (astar->open, astar->start, estimateDistance (startCoord, endCoord));
+
+	return 1;
+}
+
+
 int *astar_compute (const char *grid, 
 		    int *solLength, 
 		    int boundX, 
@@ -393,57 +451,34 @@ int *astar_compute (const char *grid,
 		    int start, 
 		    int end)
 {
-	*solLength = -1;
 	astar_t astar;
-	coord_t bounds = {boundX, boundY};
-
-	int size = bounds.x * bounds.y;
-
-
-	if (start >= size || start < 0 || end >= size || end < 0)
+	if (!init_astar_object (&astar, grid, solLength, boundX, boundY, start, end))
 		return NULL;
 
-	coord_t startCoord = getCoord (bounds, start);
+	coord_t bounds = {boundX, boundY};
 	coord_t endCoord = getCoord (bounds, end);
 
-	if (!contained (bounds, startCoord) || !contained (bounds, endCoord))
-		return NULL;
-
-	queue *open = createQueue();
-	char closed [size];
-	double gScores [size];
-	int cameFrom [size];
-
-	astar.solutionLength = solLength;
-	astar.bounds = bounds;
-	astar.start = start;
-	astar.goal = end;
-	astar.grid = grid;
-	astar.open = open;
-	astar.closed = closed;
-	astar.gScores = gScores;
-	astar.cameFrom = cameFrom;
-
-	memset (closed, 0, sizeof(closed));
-
-	gScores[start] = 0;
-	cameFrom[start] = -1;
-
-	insert (open, start, estimateDistance (startCoord, endCoord));
-	while (open->size) {
-		int node = findMin (open)->value; 
+	while (astar.open->size) {
+		int node = findMin (astar.open)->value; 
 		coord_t nodeCoord = getCoord (bounds, node);
 		if (nodeCoord.x == endCoord.x && nodeCoord.y == endCoord.y) {
-			freeQueue (open);
-			return recordSolution (&astar);
+			freeQueue (astar.open);
+			free (astar.closed);
+			free (astar.gScores);
+
+			int *rv = recordSolution (&astar);
+
+			free (astar.cameFrom);
+
+			return rv;
 		}
 
-		deleteMin (open);
-		closed[node] = 1;
+		deleteMin (astar.open);
+		astar.closed[node] = 1;
 
 		direction from = directionWeCameFrom (&astar, 
 						      node,
-						      cameFrom[node]);
+						      astar.cameFrom[node]);
 
 		directionset dirs = 
 			forcedNeighbours (&astar, nodeCoord, from) 
@@ -458,14 +493,18 @@ int *astar_compute (const char *grid,
 			if (!contained (bounds, newCoord))
 				continue;
 
-			if (closed[newNode])
+			if (astar.closed[newNode])
 				continue;
 			
 			addToOpenSet (&astar, newNode, node);
 
 		}
 	}
-	freeQueue (open);
+	freeQueue (astar.open);
+	free (astar.closed);
+	free (astar.gScores);
+	free (astar.cameFrom);
+
 	return NULL;
 }
 
@@ -479,53 +518,30 @@ int *astar_unopt_compute (const char *grid,
 		    int end)
 {
 	astar_t astar;
-	coord_t bounds = {boundX, boundY};
 
-	int size = bounds.x * bounds.y;
-
-
-	if (start >= size || start < 0 || end >= size || end < 0)
+	if (!init_astar_object (&astar, grid, solLength, boundX, boundY, start, end))
 		return NULL;
 
-	coord_t startCoord = getCoord (bounds, start);
+	coord_t bounds = {boundX, boundY};
 	coord_t endCoord = getCoord (bounds, end);
 
-	if (!contained (bounds, startCoord) || !contained (bounds, endCoord))
-		return NULL;
-
-	queue *open = createQueue();
-	char closed [size];
-	double gScores [size];
-	int cameFrom [size];
-
-	astar.solutionLength = solLength;
-	*astar.solutionLength = -1;
-	astar.bounds = bounds;
-	astar.start = start;
-	astar.goal = end;
-	astar.grid = grid;
-	astar.open = open;
-	astar.closed = closed;
-	astar.gScores = gScores;
-	astar.cameFrom = cameFrom;
-
-	memset (closed, 0, sizeof(closed));
-
-	gScores[start] = 0;
-	cameFrom[start] = -1;
-
-	insert (open, start, estimateDistance (startCoord, endCoord));
-
-	while (open->size) {
-		int node = findMin (open)->value; 
+	while (astar.open->size) {
+		int node = findMin (astar.open)->value; 
 		coord_t nodeCoord = getCoord (bounds, node);
 		if (nodeCoord.x == endCoord.x && nodeCoord.y == endCoord.y) {
-			freeQueue (open);
-			return recordSolution (&astar);
+			freeQueue (astar.open);
+			free (astar.closed);
+			free (astar.gScores);
+
+			int *rv = recordSolution (&astar);
+
+			free (astar.cameFrom);
+
+			return rv;
 		}
 
-		deleteMin (open);
-		closed[node] = 1;
+		deleteMin (astar.open);
+		astar.closed[node] = 1;
 
 		for (int dir = 0; dir < 8; dir++)
 		{
@@ -535,14 +551,17 @@ int *astar_unopt_compute (const char *grid,
 			if (!contained (bounds, newCoord) || !grid[newNode])
 				continue;
 
-			if (closed[newNode])
+			if (astar.closed[newNode])
 				continue;
 			
 			addToOpenSet (&astar, newNode, node);
 
 		}
 	}
-	freeQueue (open);
+	freeQueue (astar.open);
+	free (astar.closed);
+	free (astar.gScores);
+	free (astar.cameFrom);
 	return NULL;
 }
 
